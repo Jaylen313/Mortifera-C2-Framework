@@ -1,0 +1,31 @@
+# ============================================
+# SCREENSHOT MODULE
+# ============================================
+try:
+    from PIL import ImageGrab
+    import io
+    import base64
+    
+    SCREENSHOT_AVAILABLE = True
+except ImportError:
+    SCREENSHOT_AVAILABLE = False
+
+def execute_screenshot():
+    """Capture screenshot"""
+    if not SCREENSHOT_AVAILABLE:
+        return None, "Screenshot module not available (install Pillow)"
+    
+    try:
+        # Capture screen
+        screenshot = ImageGrab.grab()
+        
+        # Convert to bytes
+        buffer = io.BytesIO()
+        screenshot.save(buffer, format='PNG', optimize=True)
+        
+        # Encode as base64
+        img_data = base64.b64encode(buffer.getvalue()).decode()
+        
+        return img_data, None
+    except Exception as e:
+        return None, str(e)
