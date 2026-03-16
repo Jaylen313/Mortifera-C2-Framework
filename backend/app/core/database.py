@@ -7,34 +7,25 @@ work with database tables using Python classes instead of SQL.
 
 Think of it as a translator between Python and PostgreSQL.
 
-
 What's happening here?
 
 Engine: Connection pool to database
-
-Manages multiple connections efficiently
-Reuses connections instead of creating new ones each time
-
+- Manages multiple connections efficiently
+- Reuses connections instead of creating new ones each time
 
 Session: Workspace for database operations
-
-Like opening a Word document, editing, then saving
-Session = your workspace
-Commit = save your changes
-Rollback = undo if something goes wrong
-
+- Like opening a Word document, editing, then saving
+- Session = your workspace
+- Commit = save your changes
+- Rollback = undo if something goes wrong
 
 Base: Parent class for all models
-
-Every table we create will inherit from this
-SQLAlchemy uses this to track all models
-
+- Every table we create will inherit from this
+- SQLAlchemy uses this to track all models
 
 get_db(): Provides database session to routes
-
-FastAPI Dependency Injection (we'll see this in action later)
-Automatically handles connection lifecycle
-
+- FastAPI Dependency Injection (we'll see this in action later)
+- Automatically handles connection lifecycle
 """
 
 from sqlalchemy.ext.asyncio import (
@@ -43,8 +34,8 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker
 )
 from sqlalchemy.orm import declarative_base
-
 from app.core.config import settings
+
 
 # ============================================
 # CREATE DATABASE ENGINE
@@ -54,10 +45,11 @@ from app.core.config import settings
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,  # If True, prints all SQL queries (useful for debugging)
+    echo=False,  # Set to True to print SQL queries (for debugging)
     future=True,  # Use SQLAlchemy 2.0 features
     pool_pre_ping=True,  # Verify connections are alive before using them
 )
+
 
 # ============================================
 # CREATE SESSION FACTORY
@@ -73,10 +65,12 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,  # We'll explicitly flush
 )
 
+
 # ============================================
 # BASE CLASS FOR MODELS
 # ============================================
 # All our database models will inherit from this
+
 Base = declarative_base()
 
 
@@ -124,12 +118,9 @@ async def create_tables():
     """
     async with engine.begin() as conn:
         # Import all models so SQLAlchemy knows about them
-        from app.models.database import agent, task, operator
+        from app.models.database import agent, task, operator, result
         
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
     
     print("✅ Database tables created")
-
-
-

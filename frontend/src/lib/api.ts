@@ -79,6 +79,11 @@ export const authApi = {
    */
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/login', credentials);
+    
+    // Store token and user in localStorage
+    localStorage.setItem('access_token', response.data.access_token);
+    localStorage.setItem('user', JSON.stringify(response.data.user));
+    
     return response.data;
   },
 
@@ -87,6 +92,11 @@ export const authApi = {
    */
   register: async (data: { email: string; username: string; password: string }): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/auth/register', data);
+    
+    // Store token and user in localStorage
+    localStorage.setItem('access_token', response.data.access_token);
+    localStorage.setItem('user', JSON.stringify(response.data.user));
+    
     return response.data;
   },
 
@@ -108,15 +118,23 @@ export const agentsApi = {
    */
   list: async (status?: string): Promise<Agent[]> => {
     const params = status ? { status } : {};
-    const response = await api.get<Agent[]>('/agents/agents', { params });
+    const response = await api.get<Agent[]>('/agents', { params });
     return response.data;
   },
 
   /**
-   * Get single agent
+   * Get single agent by agent_id
+   */
+  getById: async (agentId: string): Promise<Agent> => {
+    const response = await api.get<Agent>(`/agents/${agentId}`);
+    return response.data;
+  },
+
+  /**
+   * Get single agent (alias for getById)
    */
   get: async (agentId: string): Promise<Agent> => {
-    const response = await api.get<Agent>(`/agents/agents/${agentId}`);
+    const response = await api.get<Agent>(`/agents/${agentId}`);
     return response.data;
   },
 
@@ -124,7 +142,7 @@ export const agentsApi = {
    * Delete agent
    */
   delete: async (agentId: string): Promise<void> => {
-    await api.delete(`/agents/agents/${agentId}`);
+    await api.delete(`/agents/${agentId}`);
   },
 };
 
@@ -135,17 +153,25 @@ export const tasksApi = {
   /**
    * Get all tasks
    */
-  list: async (agentId?: string, status?: string): Promise<Task[]> => {
+  list: async (filters?: { agent_id?: string; status?: string }): Promise<Task[]> => {
     const params: any = {};
-    if (agentId) params.agent_id = agentId;
-    if (status) params.status = status;
+    if (filters?.agent_id) params.agent_id = filters.agent_id;
+    if (filters?.status) params.status = filters.status;
     
     const response = await api.get<Task[]>('/tasks', { params });
     return response.data;
   },
 
   /**
-   * Get single task with result
+   * Get single task with result by task_id
+   */
+  getById: async (taskId: string): Promise<Task> => {
+    const response = await api.get<Task>(`/tasks/${taskId}`);
+    return response.data;
+  },
+
+  /**
+   * Get single task (alias for getById)
    */
   get: async (taskId: string): Promise<Task> => {
     const response = await api.get<Task>(`/tasks/${taskId}`);

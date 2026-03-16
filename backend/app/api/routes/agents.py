@@ -23,8 +23,37 @@ from app.api.deps import get_current_active_user, get_current_operator
 from app.models.database.operator import Operator
 
 
-
 router = APIRouter()
+
+
+def serialize_agent(agent: Agent) -> dict:
+    """
+    Serialize agent with proper UTC timezone markers.
+    
+    Fixes timezone bug: Adds 'Z' to UTC datetime strings so frontend
+    interprets them correctly as UTC instead of local time.
+    """
+    return {
+        "id": str(agent.id),
+        "agent_id": agent.agent_id,
+        "hostname": agent.hostname,
+        "username": agent.username,
+        "domain": agent.domain,
+        "internal_ip": agent.internal_ip,
+        "external_ip": agent.external_ip,
+        "os": agent.os,
+        "os_version": agent.os_version,
+        "architecture": agent.architecture,
+        "process_name": agent.process_name,
+        "process_id": agent.process_id,
+        "privilege_level": agent.privilege_level,
+        "sleep_interval": agent.sleep_interval,
+        "jitter": agent.jitter,
+        "status": agent.status.value,
+        "last_seen": agent.last_seen.isoformat() + 'Z' if agent.last_seen else None,
+        "created_at": agent.created_at.isoformat() + 'Z' if agent.created_at else None,
+        "updated_at": agent.updated_at.isoformat() + 'Z' if agent.updated_at else None,
+    }
 
 
 @router.post("/beacon")
@@ -97,7 +126,7 @@ async def agent_beacon(
         await db.commit()
         await db.refresh(agent)
         
-        print(f"📡 Agent beacon: {agent.agent_id} ({agent.hostname})")
+        print(f"📡 Agent beacon: {agent.agent_id[:8]} ({agent.hostname})")
     
     # Get pending tasks for this agent
     task_result = await db.execute(
@@ -200,7 +229,7 @@ async def submit_result(
     }
 
 
-@router.get("", response_model=List[AgentResponse])
+@router.get("")
 async def list_agents(
     status: str = None,
     current_user: Operator = Depends(get_current_active_user),
@@ -211,17 +240,7 @@ async def list_agents(
     
     Optional filter by status: ?status=active
     
-    Example response:
-    [
-        {
-            "id": "...",
-            "agent_id": "abc-123",
-            "hostname": "VICTIM-PC",
-            "status": "active",
-            "last_seen": "2024-01-20T15:30:00",
-            ...
-        }
-    ]
+    Returns agents with proper UTC timezone markers (Z suffix).
     """
     
     query = select(Agent)
@@ -236,7 +255,8 @@ async def list_agents(
     result = await db.execute(query.order_by(Agent.last_seen.desc()))
     agents = result.scalars().all()
     
-    return agents
+    # Serialize with proper timezone markers
+    return [serialize_agent(agent) for agent in agents]
 
 
 @router.get("/{agent_id}")
@@ -247,7 +267,7 @@ async def get_agent(
     """
     Get specific agent by agent_id.
     
-    Example: GET /api/v1/agents/abc-123
+    Returns agent with proper UTC timezone markers (Z suffix).
     """
     
     result = await db.execute(
@@ -258,7 +278,8 @@ async def get_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    return agent
+    # Serialize with proper timezone markers
+    return serialize_agent(agent)
 
 
 @router.delete("/{agent_id}")

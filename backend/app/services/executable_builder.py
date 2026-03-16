@@ -60,22 +60,26 @@ class ExecutableBuilder:
             print(f"❌ Agent file not found: {agent_filepath}")
             return None
         
-        agent_id = config["agent_id"]
+        # Use custom name or agent ID
+        if config.get("custom_name"):
+            base_name = config["custom_name"]
+        else:
+            base_name = f"agent_{config['agent_id']}"
         
         # Platform-specific executable name
         if platform.lower() == "windows":
-            exe_name = f"agent_{agent_id}.exe"
+            exe_name = f"{base_name}.exe"
         else:
-            exe_name = f"agent_{agent_id}"
+            exe_name = base_name
         
         exe_path = self.dist_dir / exe_name
         
         print(f"🔨 Building executable: {exe_name}")
-        print(f"Platform: {platform}")
-        print(f"Features: {', '.join(features)}")
+        print(f"   Platform: {platform}")
+        print(f"   Features: {', '.join(features) if features else 'none'}")
         
         # Build PyInstaller command
-        command = self._build_command(agent_path, agent_id, platform, features)
+        command = self._build_command(agent_path, base_name, platform, features)
         
         try:
             # Run PyInstaller
@@ -84,12 +88,15 @@ class ExecutableBuilder:
                 command,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300, # 5 minute timeout
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if platform.lower() == "windows" else 0,
+                shell=False  # ← ADD THIS
             )
             
             if result.returncode != 0:
                 print(f"❌ PyInstaller failed:")
-                print(result.stderr)
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
                 return None
             
             # Check if executable was created
@@ -97,12 +104,13 @@ class ExecutableBuilder:
                 print(f"❌ Executable not found at: {exe_path}")
                 return None
             
+            size_mb = exe_path.stat().st_size / 1024 / 1024
             print(f"✅ Executable built successfully!")
-            print(f"📦 Size: {exe_path.stat().st_size / 1024 / 1024:.2f} MB")
-            print(f"📁 Location: {exe_path}")
+            print(f"   📦 Size: {size_mb:.2f} MB")
+            print(f"   📁 Location: {exe_path}")
             
             # Clean up build artifacts
-            self._cleanup_build_files(agent_id)
+            self._cleanup_build_files(base_name)
             
             return str(exe_path)
             
@@ -111,12 +119,14 @@ class ExecutableBuilder:
             return None
         except Exception as e:
             print(f"❌ Build error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _build_command(
         self,
         agent_path: Path,
-        agent_id: str,
+        base_name: str,
         platform: str,
         features: list
     ) -> list:
@@ -126,7 +136,7 @@ class ExecutableBuilder:
             "pyinstaller",
             "--onefile",  # Single executable
             "--clean",    # Clean cache
-            "--name", f"agent_{agent_id}",
+            "--name", base_name,
             "--distpath", str(self.dist_dir),
             "--workpath", str(self.build_dir / "work"),
             "--specpath", str(self.build_dir / "specs"),
@@ -187,7 +197,7 @@ class ExecutableBuilder:
         
         return imports
     
-    def _cleanup_build_files(self, agent_id: str):
+    def _cleanup_build_files(self, base_name: str):
         """Clean up temporary build files"""
         
         # Remove work directory
@@ -196,18 +206,18 @@ class ExecutableBuilder:
             shutil.rmtree(work_dir, ignore_errors=True)
         
         # Remove spec file
-        spec_file = self.build_dir / "specs" / f"agent_{agent_id}.spec"
+        spec_file = self.build_dir / "specs" / f"{base_name}.spec"
         if spec_file.exists():
             spec_file.unlink()
         
         print("🧹 Cleaned up build artifacts")
     
-    def get_executable_path(self, agent_id: str, platform: str) -> Path:
-        """Get path to executable for given agent ID"""
+    def get_executable_path(self, base_name: str, platform: str) -> Path:
+        """Get path to executable for given base name"""
         
         if platform.lower() == "windows":
-            filename = f"agent_{agent_id}.exe"
+            filename = f"{base_name}.exe"
         else:
-            filename = f"agent_{agent_id}"
+            filename = base_name
         
         return self.dist_dir / filename

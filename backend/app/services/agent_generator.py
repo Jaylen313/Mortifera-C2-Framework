@@ -1,14 +1,7 @@
 """
 Agent Generator Service
 
-Combines Factory and Builder patterns to generate agents.
-
-This is the main service that:
-1. Takes configuration from Builder
-2. Uses Factory to create agent object
-3. Loads templates
-4. Replaces placeholders
-5. Generates final agent file
+Generates agents with Malleable C2 profile support.
 """
 
 import os
@@ -19,31 +12,22 @@ from pathlib import Path
 from app.services.agent_factory import AgentFactory
 from app.services.agent_builder import AgentBuilder
 from app.services.executable_builder import ExecutableBuilder
+from app.services.communication.profiles import get_profile_info_dict
 
 
 class AgentGenerator:
-    """
-    Main agent generation service.
-    
-    Usage:
-        generator = AgentGenerator()
-        config = {...}  # From builder
-        filepath = generator.generate(config)
-    """
+    """Main agent generation service."""
     
     def __init__(self):
-        # Get absolute path more reliably
-        current_file = Path(__file__).resolve()  # Full absolute path
-        
-        # Navigate up to project root
-        # agent_generator.py → services → app → backend → C2Py-framework
-        backend_dir = current_file.parent.parent.parent  # Go up 3 levels to backend/
-        project_root = backend_dir.parent  # Go up 1 more to C2Py-framework/
+        # Get absolute path
+        current_file = Path(__file__).resolve()
+        backend_dir = current_file.parent.parent.parent
+        project_root = backend_dir.parent
         
         # Set directories
         self.template_dir = str(project_root / "agents" / "templates")
         self.module_dir = str(project_root / "agents" / "modules")
-        self.output_dir = str(backend_dir / "generated_agents")  # Use backend_dir directly!
+        self.output_dir = str(backend_dir / "generated_agents")
         
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
@@ -51,24 +35,12 @@ class AgentGenerator:
         # Initialize executable builder
         self.executable_builder = ExecutableBuilder()
         
-        # Debug: Print paths
-        print(f"📂 Project root: {project_root}")
-        print(f"📂 Backend dir: {backend_dir}")
         print(f"📂 Template directory: {self.template_dir}")
         print(f"📂 Module directory: {self.module_dir}")
         print(f"📂 Output directory: {self.output_dir}")
     
     def generate(self, config: Dict[str, Any], build_executable: bool = True) -> Dict[str, str]:
-        """
-        Generate an agent from configuration.
-        
-        Args:
-            config: Configuration dictionary from AgentBuilder
-            build_executable: Whether to build standalone executable
-        
-        Returns:
-            Dictionary with paths to generated files
-        """
+        """Generate an agent from configuration."""
         
         # Create agent using Factory
         agent = AgentFactory.create_agent(
@@ -85,8 +57,12 @@ class AgentGenerator:
         # Add feature modules
         agent_code = self._add_feature_modules(agent_code, config, agent)
         
-        # Generate filename
-        filename = f"agent_{config['agent_id']}.py"
+        # Generate filename with custom name support
+        if config.get("custom_name"):
+            filename = f"{config['custom_name']}.py"
+        else:
+            filename = f"agent_{config['agent_id']}.py"
+        
         filepath = os.path.join(self.output_dir, filename)
         
         # Write Python source
@@ -94,6 +70,7 @@ class AgentGenerator:
             f.write(agent_code)
         
         print(f"✅ Python agent generated: {filepath}")
+        print(f"   Profile: {config.get('profile', 'chrome_browser')}")
         
         result = {
             "python_file": filepath,
@@ -113,7 +90,7 @@ class AgentGenerator:
             if exe_path:
                 result["executable_file"] = exe_path
             else:
-                print("⚠️ Warning: Executable build failed, but Python file is available")
+                print("⚠️  Warning: Executable build failed, but Python file is available")
         
         return result
     
@@ -128,17 +105,7 @@ class AgentGenerator:
         config: Dict[str, Any],
         agent: Any
     ) -> str:
-        """
-        Replace placeholders in template.
-        
-        Placeholders:
-        - {{C2_SERVER}} → C2 server URL
-        - {{AGENT_ID}} → Agent ID
-        - {{SLEEP_INTERVAL}} → Sleep time
-        - {{JITTER}} → Jitter value
-        - {{PLATFORM}} → Platform name
-        - {{FEATURES}} → Feature list
-        """
+        """Replace placeholders in template."""
         
         code = template
         
@@ -149,6 +116,19 @@ class AgentGenerator:
         code = code.replace("{{JITTER}}", str(config["jitter"]))
         code = code.replace("{{PLATFORM}}", config["platform"])
         code = code.replace("{{FEATURES}}", ", ".join(config["features"]))
+        
+        # ← ADDED: Profile replacement
+        profile_name = config.get("profile", "chrome_browser")
+        code = code.replace("{{PROFILE}}", profile_name)
+        
+        # ← ADDED: Profile info dict (for agent to use)
+        profile_dict = get_profile_info_dict(profile_name)
+        profile_code = f"""
+# Malleable C2 Profile: {profile_name}
+PROFILE_NAME = "{profile_name}"
+PROFILE_INFO = {profile_dict}
+"""
+        code = code.replace("{{PROFILE_CODE}}", profile_code)
         
         # Encryption code
         if config["encryption_enabled"]:
@@ -169,11 +149,7 @@ class AgentGenerator:
         config: Dict[str, Any],
         agent: Any
     ) -> str:
-        """
-        Add feature module code to agent.
-        
-        Loads module templates and inserts them into agent code.
-        """
+        """Add feature module code to agent."""
         
         feature_modules_code = ""
         feature_execution_code = ""

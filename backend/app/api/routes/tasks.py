@@ -18,11 +18,36 @@ from app.api.deps import get_current_operator
 from app.models.database.operator import Operator
 
 
-
-
-
-
 router = APIRouter()
+
+
+def serialize_task(task: Task, result: Result = None) -> dict:
+    """
+    Serialize task with proper UTC timezone markers.
+    
+    Fixes timezone bug: Adds 'Z' to UTC datetime strings so frontend
+    interprets them correctly as UTC instead of local time.
+    """
+    task_data = {
+        "id": str(task.id),
+        "agent_id": str(task.agent_id),
+        "task_type": task.task_type.value,
+        "command": task.command,
+        "status": task.status.value,
+        "priority": task.priority,
+        "created_at": task.created_at.isoformat() + 'Z' if task.created_at else None,
+        "completed_at": task.completed_at.isoformat() + 'Z' if task.completed_at else None,
+    }
+    
+    # Add result if provided
+    if result:
+        task_data["result"] = {
+            "output": result.output,
+            "error": result.error,
+            "execution_time": result.execution_time
+        }
+    
+    return task_data
 
 
 @router.post("")
@@ -91,6 +116,8 @@ async def list_tasks(
     """
     List tasks with optional filters.
     
+    Returns tasks with proper UTC timezone markers (Z suffix).
+    
     Examples:
     - GET /api/v1/tasks
     - GET /api/v1/tasks?agent_id=abc-123
@@ -118,19 +145,8 @@ async def list_tasks(
     result = await db.execute(query.order_by(Task.created_at.desc()))
     tasks = result.scalars().all()
     
-    return [
-        {
-            "id": str(task.id),
-            "agent_id": str(task.agent_id),
-            "task_type": task.task_type.value,
-            "command": task.command,
-            "status": task.status.value,
-            "priority": task.priority,
-            "created_at": task.created_at.isoformat(),
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None
-        }
-        for task in tasks
-    ]
+    # Serialize with proper timezone markers
+    return [serialize_task(task) for task in tasks]
 
 
 @router.get("/{task_id}")
@@ -140,6 +156,8 @@ async def get_task(
 ):
     """
     Get specific task with its result.
+    
+    Returns task with proper UTC timezone markers (Z suffix).
     
     Example: GET /api/v1/tasks/550e8400-e29b-41d4-a716-446655440000
     """
@@ -161,18 +179,5 @@ async def get_task(
     )
     result = result_query.scalar_one_or_none()
     
-    return {
-        "id": str(task.id),
-        "agent_id": str(task.agent_id),
-        "task_type": task.task_type.value,
-        "command": task.command,
-        "status": task.status.value,
-        "priority": task.priority,
-        "created_at": task.created_at.isoformat(),
-        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-        "result": {
-            "output": result.output,
-            "error": result.error,
-            "execution_time": result.execution_time
-        } if result else None
-    }
+    # Serialize with proper timezone markers and result
+    return serialize_task(task, result)

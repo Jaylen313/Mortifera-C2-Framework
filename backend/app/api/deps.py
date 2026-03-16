@@ -58,8 +58,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Get user ID from token
-    user_id = payload.get("user_id")
+    # Get user ID from token (JWT standard uses "sub" for subject/user_id)
+    user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

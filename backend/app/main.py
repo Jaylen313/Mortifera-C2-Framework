@@ -1,105 +1,97 @@
 """
-C2 Framework - Main Application
-
-This is the entry point for the FastAPI application.
+Main FastAPI Application
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import asyncio
 
+from app.core.database import create_tables
 from app.core.config import settings
-from app.core.database import engine
-from app.models.database.base import Base
-from app.api.routes import agents, tasks, auth, operators, generator
-from app.models.database import agent, task, result, operator
+from app.api.routes import auth, agents, tasks, generator, operators
+from app.services.agent_cleanup import cleanup_loop
 
 
+# Global cleanup task reference
+cleanup_task = None
 
-# ============================================
-# CREATE FASTAPI APPLICATION
-# ============================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager.
+    
+    Runs startup/shutdown logic:
+    - On startup: Create DB tables, start cleanup task
+    - On shutdown: Stop cleanup task
+    """
+    global cleanup_task
+    
+    # STARTUP
+    print("🚀 Starting Mortifera C2 Server...")
+    await create_tables()
+    print("✅ Database tables ready")
+    
+    # Start background cleanup task
+    cleanup_task = asyncio.create_task(cleanup_loop())
+    print("✅ Background cleanup task started")
+    
+    yield  # Server runs here
+    
+    # SHUTDOWN
+    print("🛑 Shutting down...")
+    if cleanup_task:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+    print("✅ Shutdown complete")
+
+
+# Create FastAPI application
 app = FastAPI(
-    title=settings.PROJECT_NAME,
+    title="Mortifera C2 Server",
+    description="Command and Control Framework API",
     version="1.0.0",
-    description="Command and Control Framework",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    lifespan=lifespan
 )
 
-# ============================================
-# CORS MIDDLEWARE
-# ============================================
+
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=["*"],  # In production, restrict this
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ============================================
-# STARTUP EVENT
-# ============================================
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    print(f"✅ {settings.PROJECT_NAME} starting up...")
-    print(f"✅ Database: {settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}")
-    print(f"✅ API docs: http://localhost:8000{settings.API_V1_STR}/docs")
 
-# ============================================
-# ROOT ENDPOINTS
-# ============================================
+# Include routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"])
+app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["Tasks"])
+app.include_router(generator.router, prefix="/api/v1/generator", tags=["Generator"])
+app.include_router(operators.router, prefix="/api/v1/operators", tags=["Operators"])
+
+
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """
+    Root endpoint - health check.
+    """
     return {
-        "message": f"{settings.PROJECT_NAME} API",
+        "message": "Mortifera C2 Server",
         "version": "1.0.0",
-        "docs": f"{settings.API_V1_STR}/docs"
+        "status": "operational"
     }
 
+
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+async def health():
+    """
+    Health check endpoint.
+    """
     return {"status": "healthy"}
-
-
-# We'll add route includes here in next steps
-
-# ============================================
-# INCLUDE ROUTERS
-# ============================================
-app.include_router(
-    agents.router,
-    prefix=f"{settings.API_V1_STR}/agents",
-    tags=["agents"]
-)
-
-app.include_router(
-    tasks.router,
-    prefix=f"{settings.API_V1_STR}/tasks",
-    tags=["tasks"]
-)
-
-app.include_router(
-    auth.router,
-    prefix=f"{settings.API_V1_STR}/auth",
-    tags=["authentication"]
-)
-
-app.include_router(
-    operators.router,
-    prefix=f"{settings.API_V1_STR}/operators",
-    tags=["operators"]
-)
-
-app.include_router(
-    generator.router,
-    prefix=f"{settings.API_V1_STR}/generator",
-    tags=["generator"]
-)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

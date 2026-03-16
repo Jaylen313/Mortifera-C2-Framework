@@ -1,8 +1,5 @@
 /**
  * TypeScript type definitions
- * 
- * These define the shape of data from the API.
- * TypeScript will catch errors if we use the wrong types.
  */
 
 // ============================================
@@ -121,20 +118,33 @@ export interface AgentGenerateRequest {
   sleep_interval: number;
   jitter: number;
   encryption_enabled: boolean;
+  custom_name?: string;
+  profile?: string;  // ← ADDED: Malleable C2 profile
 }
 
 export interface AgentGenerateResponse {
   success: boolean;
   agent_id: string;
-  filename: string;
-  download_url: string;
+  python_file: string;
+  executable: string | null;
+  download_python: string;
+  download_executable: string | null;
   config: {
     platform: string;
     features: string[];
     sleep_interval: number;
     jitter: number;
     encryption_enabled: boolean;
+    profile?: string;  // ← ADDED
   };
+}
+
+// ============================================
+// MALLEABLE C2 PROFILE TYPES
+// ============================================
+export interface C2Profile {
+  name: string;
+  description: string;
 }
 
 // ============================================

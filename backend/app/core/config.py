@@ -1,115 +1,67 @@
 """
-Configuration Module
+Configuration Settings
 
-This file loads settings from .env file and makes them
-available throughout the application.
-
-Think of this as the "control panel" for your entire backend.
+Centralized configuration using environment variables.
+Falls back to secure defaults if not set.
 """
 
-from typing import List
+import os
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, validator
+from typing import Optional
 
 
 class Settings(BaseSettings):
     """
-    Application Settings
+    Application settings.
     
-    This class reads environment variables and provides
-    type-safe access to configuration.
+    These can be overridden via environment variables.
+    Example: DATABASE_URL="postgresql://..." python main.py
     """
     
     # ============================================
-    # API SETTINGS
+    # DATABASE
     # ============================================
-    PROJECT_NAME: str
-    DEBUG: bool = False
-    API_V1_STR: str = "/api/v1"
+    DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://c2user:c2password@localhost:5432/c2db"
+)
     
     # ============================================
-    # DATABASE SETTINGS
+    # SECURITY
     # ============================================
-    POSTGRES_SERVER: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
-    POSTGRES_PORT: int = 5432
+    SECRET_KEY: str = os.getenv(
+        "SECRET_KEY",
+        "your-super-secret-key-change-this-in-production-make-it-long-and-random"
+    )
     
-    @property
-    def DATABASE_URL(self) -> str:
-        """
-        Construct database connection URL
-        
-        Format: postgresql+asyncpg://user:password@server:port/database
-        
-        Why asyncpg? It allows async/await for database operations
-        which makes the server faster and more efficient.
-        """
-        return (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:"
-            f"{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:"
-            f"{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        )
+    # Encryption key must be 32 bytes (256 bits) when base64 decoded
+    # This is a 32-byte key encoded in base64
+    ENCRYPTION_KEY: str = os.getenv(
+        "ENCRYPTION_KEY",
+        "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="  # "12345678901234567890123456789012" in base64
+    )
     
-    # ============================================
-    # SECURITY SETTINGS
-    # ============================================
-    SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # Encryption key for agent communications
-    ENCRYPTION_KEY: str
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 24  # Token valid for 24 hours
     
     # ============================================
-    # CORS SETTINGS
+    # API
     # ============================================
-    BACKEND_CORS_ORIGINS: List[str] = []
-    
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        """
-        Parse CORS origins from string or list
-        
-        CORS = Cross-Origin Resource Sharing
-        This controls which websites can call our API.
-        
-        Example: If frontend is at http://localhost:3000,
-        we need to allow it to make requests to our API.
-        """
-        if isinstance(v, str):
-            # If it's a string like '["url1", "url2"]', parse it
-            if v.startswith("["):
-                import json
-                return json.loads(v)
-            # If it's a comma-separated string
-            return [i.strip() for i in v.split(",")]
-        return v
+    API_V1_PREFIX: str = "/api/v1"
+    PROJECT_NAME: str = "Mortifera C2 Framework"
     
     # ============================================
-    # ADMIN USER
+    # CORS
     # ============================================
-    FIRST_SUPERUSER_EMAIL: str
-    FIRST_SUPERUSER_PASSWORD: str
+    BACKEND_CORS_ORIGINS: list = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
     
     class Config:
-        """
-        Pydantic configuration
-        
-        env_file tells Pydantic to load values from .env
-        case_sensitive means variable names must match exactly
-        """
-        env_file = ".env"
         case_sensitive = True
 
 
-# ============================================
-# CREATE SETTINGS INSTANCE
-# ============================================
-# This loads all settings from .env file
 settings = Settings()
-
-# Now anywhere in your code, you can do:
-# from app.core.config import settings
-# print(settings.DATABASE_URL)
